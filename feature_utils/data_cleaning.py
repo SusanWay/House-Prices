@@ -1,14 +1,16 @@
 import pandas as pd
 
 
+# ======================
+# Missing values
+# ======================
+
 def fill_column(
     df: pd.DataFrame,
     column: str,
     strategy: str = "median",
 ) -> pd.DataFrame:
-    """
-    Заполняет пропуски в одной колонке.
-    """
+
     if column not in df.columns:
         return df
 
@@ -35,10 +37,7 @@ def fill_missing_values(
     strategy: str = "median",
     inplace: bool = True,
 ) -> pd.DataFrame:
-    """
-    Заполняет пропуски в указанных колонках.
-    Возвращает pd.DataFrame
-    """
+
     if not inplace:
         df = df.copy()
 
@@ -47,5 +46,50 @@ def fill_missing_values(
 
     for col in columns:
         df = fill_column(df, col, strategy)
+
+    return df
+
+
+# ======================
+# Outliers
+# ======================
+
+def clip_column(
+    df: pd.DataFrame,
+    column: str,
+    quantile: float = 0.99,
+) -> pd.DataFrame:
+    """
+    Ограничивает выбросы в одной колонке
+    """
+
+    if column not in df.columns:
+        return df
+
+    if df[column].isna().all():
+        return df
+
+    upper = df[column].quantile(quantile)
+
+    df[column] = df[column].clip(upper=upper)
+
+    return df
+
+
+def handle_outliers(
+    df: pd.DataFrame,
+    columns: list[str],
+    quantile: float = 0.99,
+    inplace: bool = True,
+) -> pd.DataFrame:
+    """
+    Обрабатывает выбросы в указанных колонках
+    """
+
+    if not inplace:
+        df = df.copy()
+
+    for col in columns:
+        df = clip_column(df, col, quantile)
 
     return df
