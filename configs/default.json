@@ -1,0 +1,26 @@
+{
+  "seed": 42,
+  "learning_rate": 0.05,
+
+  "paths": {
+    "train": "data/train.csv",
+    "test": "data/test.csv",
+    "submission": "data/sample_submission.csv",
+    "output": "outputs/"
+  },
+
+  "data": {
+    "target": "SalePrice",
+    "id_column": "Id"
+  },
+
+  "validation": {
+    "n_splits": 5
+  },
+
+  "metric": "rmse",
+
+  "n_estimators": 1000,
+
+  "early_stopping_rounds": 100
+}
