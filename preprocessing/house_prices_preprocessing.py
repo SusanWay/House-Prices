@@ -1,4 +1,7 @@
 import pandas as pd
+import numpy as np
+
+from sklearn.preprocessing import StandardScaler
 
 from feature_utils.feature_engineering import replace_with_has_large
 from feature_utils.data_cleaning import (
@@ -11,19 +14,6 @@ from feature_utils.data_cleaning import (
 
 
 class HousePricesPreprocessor:
-    """
-    Единый препроцессор для датасета House Prices.
-
-    Логика:
-    1. Заменяет разреженные численные признаки на бинарные.
-    2. Заполняет пропуски в численных колонках.
-    3. Обрабатывает выбросы.
-    4. Удаляет малоинформативные колонки.
-    5. Удаляет колонки с большим количеством пропусков.
-    6. Заполняет категориальные пропуски значением 'None'.
-    7. Делает one-hot encoding.
-    8. При transform выравнивает колонки под train.
-    """
 
     FEATURES_SPARSE = [
         "MiscVal",
@@ -113,83 +103,109 @@ class HousePricesPreprocessor:
         "ExterQual",
         "KitchenQual",
         "GarageFinish",
+        "BsmtFinType1",
     ]
 
     def __init__(self, outlier_quantile: float = 0.95):
         self.outlier_quantile = outlier_quantile
         self.feature_columns_ = None
+        self.scaler = StandardScaler()
+        self.numeric_columns_ = None
 
     def _apply_pipeline(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
 
-        # 1. Разреженные признаки -> бинарные
+        # 0. Удаляем Id если есть
+        if "Id" in df.columns:
+            df = df.drop(columns=["Id"])
+
+        # 1. Sparse → бинарные
         df = replace_with_has_large(df, self.FEATURES_SPARSE)
 
-        # 2. Заполнение пропусков в численных колонках
+        # 2. Missing
         df = fill_missing_values(
             df,
             columns=self.MISSING_NUMERIC_COLUMNS,
             strategy="median",
         )
 
-        # 3. Обработка выбросов
+        # 3. Outliers
         df = handle_outliers(
             df,
             columns=self.OUTLIER_COLUMNS,
             quantile=self.outlier_quantile,
         )
 
-        # 4. Удаление малоинформативных колонок
+        # 4–5. Drop columns
         df = drop_columns(df, self.LOW_INFORMATION_COLUMNS)
-
-        # 5. Удаление колонок с большим числом пропусков
         df = drop_columns(df, self.HIGH_MISSING_COLUMNS)
 
-        # 6. Заполнение категориальных пропусков
+        # 6. Fill None
         df = fill_none_columns(df, self.NONE_FILL_COLUMNS)
 
-        # 7. One-hot encoding
+        # 7. One-hot
         df = one_hot_encode_columns(df, self.CATEGORICAL_COLUMNS)
 
         return df
 
-    def fit(self, df: pd.DataFrame) -> "HousePricesPreprocessor":
-        """
-        Запоминает итоговый набор признаков после preprocessing на train.
-        """
+    def _get_numeric_columns(self, df: pd.DataFrame):
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+
+        # исключаем бинарные (0/1)
+        non_binary_cols = [
+            col for col in numeric_cols
+            if not set(df[col].dropna().unique()).issubset({0, 1})
+        ]
+
+        return non_binary_cols
+
+    def fit(self, df: pd.DataFrame):
         processed = self._apply_pipeline(df)
+
+        # находим численные колонки
+        self.numeric_columns_ = self._get_numeric_columns(processed)
+
+        # обучаем scaler
+        self.scaler.fit(processed[self.numeric_columns_])
 
         self.feature_columns_ = processed.columns.tolist()
+
         return self
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Применяет preprocessing и выравнивает колонки под train.
-        """
+    def transform(self, df: pd.DataFrame):
         if self.feature_columns_ is None:
-            raise ValueError("Сначала вызови fit() или fit_transform() на train данных.")
+            raise ValueError("Сначала вызови fit()")
 
         processed = self._apply_pipeline(df)
 
-        # Добавляем отсутствующие колонки
+        # добавляем отсутствующие
         for col in self.feature_columns_:
             if col not in processed.columns:
                 processed[col] = 0
 
-        # Удаляем лишние колонки, которых не было в train
-        extra_cols = [col for col in processed.columns if col not in self.feature_columns_]
+        # удаляем лишние
+        extra_cols = [c for c in processed.columns if c not in self.feature_columns_]
         if extra_cols:
             processed = processed.drop(columns=extra_cols)
 
-        # Восстанавливаем порядок колонок
         processed = processed[self.feature_columns_]
+
+        # нормализация
+        processed[self.numeric_columns_] = self.scaler.transform(
+            processed[self.numeric_columns_]
+        )
 
         return processed
 
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Обучает препроцессор на train и сразу возвращает обработанный train.
-        """
+    def fit_transform(self, df: pd.DataFrame):
         processed = self._apply_pipeline(df)
+
+        self.numeric_columns_ = self._get_numeric_columns(processed)
+
+        processed[self.numeric_columns_] = self.scaler.fit_transform(
+            processed[self.numeric_columns_]
+        )
+
         self.feature_columns_ = processed.columns.tolist()
+
         return processed
