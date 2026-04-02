@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression, Ridge, Lasso
 from sklearn.dummy import DummyRegressor
 
-from models.train import train_model
+from models.baseline.train import train_model
 
 
 def get_baseline_models() -> Dict:
