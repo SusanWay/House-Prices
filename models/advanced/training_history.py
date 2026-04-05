@@ -174,7 +174,7 @@ def show_training_history(
 
     # --- popup ---
     ax.annotate(
-        f"RMSE = {best_score:.0f}\niter = {best_iter}",
+        f"RMSE = {best_score:.4f}\niter = {best_iter}",
         xy=(best_iter, best_score),
         xytext=(30, -30),
         textcoords="offset points",
